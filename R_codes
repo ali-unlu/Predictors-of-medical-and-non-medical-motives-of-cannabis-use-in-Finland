@@ -1,0 +1,157 @@
+##########  Logistic regression ##########
+
+
+#### Libraries ############
+req <- substitute(require(x, character.only = TRUE))
+libs<-c("sjPlot", "ggplot2", "jtools", "car", "blorr", "DescTools", "MASS", "tidyverse", "blorr", "dotwhisker")
+sapply(libs, function(x) eval(req) || {install.packages(x); eval(req)})
+
+
+############### Model ###########
+
+# Fit the null model (only intercept, no predictors)
+null_model <- glm(cannabis ~ 1, data = df, family = binomial)
+
+# Base model: only x1
+base_model <- glm(cannabis ~ gender+age+education+onset+city+monthly_usage+amount, data = df, family = binomial)
+summary(base_model)
+
+# Extended model: with x2 and x3
+extended_model <- glm(cannabis ~ gender+age+education+onset+monthly_usage+city+amount+employment+usage_type+severity+thc+cbd, data = df, family = binomial)
+summary(extended_model)
+
+
+######## Likelihood Ratio Test
+anova(base_model, extended_model, test = "Chisq")
+
+# Compare AIC
+AIC(base_model, extended_model)
+
+########## Compare BIC
+BIC(base_model, extended_model)
+
+
+######### Pseudo-R² (McFadden's R²)
+base_model_r2 <- 1 - (logLik(base_model) / logLik(null_model))
+
+# McFadden's Pseudo-R² for extended model
+extended_model_r2 <- 1 - (logLik(extended_model) / logLik(null_model))
+
+# Print McFadden's Pseudo-R² values
+print(paste("McFadden's R² for base model: ", base_model_r2))
+print(paste("McFadden's R² for extended model: ", extended_model_r2))
+
+########## Summary ########### 
+
+# Summary of extended model
+summary(extended_model)
+
+
+########### Model Fit ###############
+# Model Fit Statistics for Multiple Logistic Regression
+
+# Hosmer Lemeshow gof test
+blorr::blr_test_hosmer_lemeshow(base_model) 
+blorr::blr_test_hosmer_lemeshow(extended_model) 
+
+
+
+####### Formatted table ############
+# Producing Formatted Tables of Multiple Logistic Regression Results
+sjPlot::tab_model(extended_model)
+
+# if more than more one model
+sjPlot::tab_model(base_model, extended_model, pred.labels = c("Intercept", "indvar1 label", "indvar2 label"),
+                  dv.labels = c("Base Model", "Extended Model"), string.pred = "Estimates", string.ci = "95% CIs", string.p = "p-values")
+
+
+
+
+################## Sensitivity Analysis ###########
+
+
+########## correlation between education and employment
+# as requested by the reviewer
+
+table(df$education)
+table(df$employment)
+
+df$employment_binary <- ifelse(df$employment == "Employed", 1, 0)
+# Calculate point-biserial correlation
+cor.test(df$education, df$employment_binary, method = "pearson")
+
+# If you prefer to treat both variables as categorical, you can use Cramér's V.
+library(vcd)
+
+# Create a contingency table
+education_employment_table <- table(df$education, df$employment)
+
+# Calculate Cramér's V
+assocstats(education_employment_table)
+
+
+####### with 3 employmenbt categories
+# Updated contingency table
+education_employment_table <- table(df$education, df$employment)
+library(vcd)
+
+# Calculate Cramér's V
+assocstats(education_employment_table)
+
+
+
+######### imputing low distribution of others in Employment ##############
+
+
+# Define the function to replace 'Other' with NA and fill based on proportional distribution
+fill_column_proportionally <- function(data, column) {
+  # Step 1: Replace 'Other' with NA in the specified column
+  data[[column]][data[[column]] == "Other"] <- NA
+  
+  # Step 2: Calculate proportions of non-missing categories
+  proportions <- prop.table(table(data[[column]], useNA = "no"))
+  
+  # Step 3: Generate replacement values based on proportions
+  replacement_values <- sample(
+    names(proportions), 
+    sum(is.na(data[[column]])), 
+    replace = TRUE, 
+    prob = proportions
+  )
+  
+  # Step 4: Fill NA values in the column with the proportional replacements
+  data[[column]][is.na(data[[column]])] <- replacement_values
+  
+  # Step 5: Remove "Other" from the factor levels if the column is a factor
+  if (is.factor(data[[column]])) {
+    data[[column]] <- droplevels(data[[column]])
+  }
+  
+  return(data)
+}
+
+
+
+# Apply the function to "usage_type"
+df <- fill_column_proportionally (df, "employment")
+
+# Check the levels and table to confirm "Other" has been removed completely
+levels(df$employment)  # Should not contain "Other" anymore
+table(df$employment)   # Should show counts without "Other"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
